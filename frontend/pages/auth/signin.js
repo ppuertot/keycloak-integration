@@ -1,14 +1,22 @@
 // pages/auth/signin.js
-import { signIn } from 'next-auth/react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '../../components/Layout';
+import authClient from '../../lib/auth';
 
 export default function SignIn() {
   const router = useRouter();
   const { error } = router.query;
 
+  useEffect(() => {
+    // Si ya está autenticado, redirigir al dashboard
+    if (authClient.isAuthenticated()) {
+      router.push('/dashboard');
+    }
+  }, []);
+
   const handleSignIn = () => {
-    signIn('keycloak', { callbackUrl: '/dashboard' });
+    authClient.login();
   };
 
   return (
@@ -46,7 +54,7 @@ export default function SignIn() {
 
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
-              Al iniciar sesión, aceptas nuestros términos de servicio
+              Serás redirigido a Keycloak para autenticarte de forma segura
             </p>
           </div>
         </div>

@@ -3,7 +3,9 @@ require('dotenv').config({ path: '../.env' });
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const { verifyToken, requireRole, requireAnyRole } = require('./middleware/auth');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.BACKEND_PORT || 4000;
@@ -16,6 +18,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -27,11 +30,21 @@ app.use((req, res, next) => {
 // RUTAS PÚBLICAS
 // ==========================================
 
+// Rutas de autenticación OAuth2
+app.use('/auth', authRoutes);
+
 app.get('/', (req, res) => {
   res.json({
     message: 'API Backend con Keycloak',
     version: '1.0.0',
     endpoints: {
+      auth: [
+        'GET /auth/login',
+        'GET /auth/callback',
+        'POST /auth/refresh',
+        'POST /auth/logout',
+        'GET /auth/user'
+      ],
       public: [
         'GET /',
         'GET /api/health',

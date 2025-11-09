@@ -1,10 +1,15 @@
 // pages/index.js
-import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import Link from 'next/link';
+import authClient from '../lib/auth';
 
 export default function Home() {
-  const { data: session } = useSession();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    setIsAuthenticated(authClient.isAuthenticated());
+  }, []);
 
   return (
     <Layout>
@@ -14,11 +19,11 @@ export default function Home() {
             Bienvenido a la Demo de Keycloak
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Esta aplicación demuestra la integración de Keycloak con Express.js y Next.js
+            Esta aplicación demuestra la integración de Keycloak con Express.js y Next.js usando OAuth2 Authorization Code Flow
           </p>
         </div>
 
-        {!session ? (
+        {!isAuthenticated ? (
           <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-md p-8">
             <h2 className="text-2xl font-semibold mb-6 text-center">
               🔐 Autenticación Centralizada
