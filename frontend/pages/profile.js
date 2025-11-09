@@ -1,45 +1,47 @@
 // pages/profile.js
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
-import axios from 'axios';
+import authClient from '../lib/auth';
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
 export default function Profile() {
-  const { data: session, status } = useSession();
   const router = useRouter();
+  const [user, setUser] = useState(null);
   const [profileData, setProfileData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin');
-    }
-  }, [status, router]);
+    const loadProfile = async () => {
+      // Verificar autenticación
+      if (!authClient.isAuthenticated()) {
+        router.push('/auth/signin');
+        return;
+      }
 
-  useEffect(() => {
-    if (session?.accessToken) {
-      fetchProfile();
-    }
-  }, [session]);
+      try {
+        // Obtener información del usuario
+        const userData = await authClient.getUser();
+        setUser(userData);
 
-  const fetchProfile = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.get('http://localhost:4000/api/profile', {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      });
-      setProfileData(response.data.profile);
-    } catch (err) {
-      console.error('Error fetching profile:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+        // Obtener datos del perfil del backend
+        const response = await authClient.fetch(`${BACKEND_URL}/api/profile`);
+        if (response.ok) {
+          const data = await response.json();
+          setProfileData(data.profile);
+        }
+      } catch (err) {
+        console.error('Error loading profile:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  if (status === 'loading' || loading) {
+    loadProfile();
+  }, []);
+
+  if (loading) {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
@@ -49,7 +51,7 @@ export default function Profile() {
     );
   }
 
-  if (!session) {
+  if (!user) {
     return null;
   }
 
@@ -61,13 +63,13 @@ export default function Profile() {
         <div className="bg-white rounded-lg shadow-md p-8 mb-6">
           <div className="flex items-center mb-6">
             <div className="w-20 h-20 bg-blue-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">
-              {session.user?.name?.charAt(0) || session.user?.email?.charAt(0) || 'U'}
+              {user.name?.charAt(0) || user.preferred_username?.charAt(0) || user.email?.charAt(0) || 'U'}
             </div>
             <div className="ml-6">
               <h2 className="text-2xl font-semibold text-gray-900">
-                {session.user?.name || 'Usuario'}
+                {user.name || user.preferred_username || 'Usuario'}
               </h2>
-              <p className="text-gray-600">{session.user?.email}</p>
+              <p className="text-gray-600">{user.email}</p>
             </div>
           </div>
 
@@ -78,16 +80,24 @@ export default function Profile() {
             <dl className="space-y-3">
               <div>
                 <dt className="text-sm font-medium text-gray-500">Email</dt>
-                <dd className="text-sm text-gray-900">{session.user?.email || 'No disponible'}</dd>
+                <dd className="text-sm text-gray-900">{user.email || 'No disponible'}</dd>
               </div>
               <div>
                 <dt className="text-sm font-medium text-gray-500">Nombre</dt>
-                <dd className="text-sm text-gray-900">{session.user?.name || 'No disponible'}</dd>
+                <dd className="text-sm text-gray-900">{user.name || 'No disponible'}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Username</dt>
+                <dd className="text-sm text-gray-900">{user.preferred_username || 'No disponible'}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">ID de Usuario</dt>
+                <dd className="text-sm text-gray-900 font-mono">{user.sub}</dd>
               </div>
               <div>
                 <dt className="text-sm font-medium text-gray-500">Token de Acceso</dt>
                 <dd className="text-sm text-gray-900 font-mono truncate">
-                  {session.accessToken ? `${session.accessToken.substring(0, 30)}...` : 'No disponible'}
+                  {authClient.getToken() ? `${authClient.getToken().substring(0, 30)}...` : 'No disponible'}
                 </dd>
               </div>
             </dl>
