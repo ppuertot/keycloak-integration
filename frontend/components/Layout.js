@@ -1,9 +1,27 @@
 // components/Layout.js
-import { useSession, signOut } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import authClient from '../lib/auth';
 
 export default function Layout({ children }) {
-  const { data: session, status } = useSession();
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      if (authClient.isAuthenticated()) {
+        const userData = await authClient.getUser();
+        setUser(userData);
+      }
+      setLoading(false);
+    };
+
+    loadUser();
+  }, []);
+
+  const handleLogout = () => {
+    authClient.logout();
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -23,7 +41,7 @@ export default function Layout({ children }) {
                 >
                   Inicio
                 </Link>
-                {session && (
+                {user && (
                   <>
                     <Link
                       href="/dashboard"
@@ -42,15 +60,15 @@ export default function Layout({ children }) {
               </div>
             </div>
             <div className="flex items-center">
-              {status === 'loading' ? (
+              {loading ? (
                 <span className="text-sm text-gray-500">Cargando...</span>
-              ) : session ? (
+              ) : user ? (
                 <div className="flex items-center space-x-4">
                   <span className="text-sm text-gray-700">
-                    Hola, <strong>{session.user?.name || session.user?.email}</strong>
+                    Hola, <strong>{user.name || user.preferred_username || user.email}</strong>
                   </span>
                   <button
-                    onClick={() => signOut({ callbackUrl: '/' })}
+                    onClick={handleLogout}
                     className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium transition"
                   >
                     Cerrar Sesión
@@ -76,7 +94,7 @@ export default function Layout({ children }) {
       <footer className="bg-white border-t mt-12">
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <p className="text-center text-gray-500 text-sm">
-            Demo de integración Keycloak + Express + Next.js
+            Demo de integración Keycloak + Express + Next.js (OAuth2 Authorization Code Flow)
           </p>
         </div>
       </footer>

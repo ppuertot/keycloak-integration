@@ -1,35 +1,41 @@
 // pages/dashboard.js
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
-import axios from 'axios';
+import authClient from '../lib/auth';
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
 
 export default function Dashboard() {
-  const { data: session, status } = useSession();
   const router = useRouter();
+  const [user, setUser] = useState(null);
   const [apiData, setApiData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin');
-    }
-  }, [status, router]);
+    const loadUser = async () => {
+      if (!authClient.isAuthenticated()) {
+        router.push('/auth/signin');
+        return;
+      }
+
+      const userData = await authClient.getUser();
+      setUser(userData);
+    };
+
+    loadUser();
+  }, []);
 
   const fetchProtectedData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get('http://localhost:4000/api/protected', {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      });
-      setApiData(response.data);
+      const response = await authClient.fetch(`${BACKEND_URL}/api/protected`);
+      const data = await response.json();
+      setApiData(data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al conectar con el backend');
+      setError(err.message || 'Error al conectar con el backend');
       console.error('Error:', err);
     } finally {
       setLoading(false);
@@ -40,14 +46,11 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get('http://localhost:4000/api/users', {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      });
-      setApiData(response.data);
+      const response = await authClient.fetch(`${BACKEND_URL}/api/users`);
+      const data = await response.json();
+      setApiData(data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al conectar con el backend');
+      setError(err.message || 'Error al conectar con el backend');
       console.error('Error:', err);
     } finally {
       setLoading(false);
@@ -58,21 +61,18 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get('http://localhost:4000/api/admin', {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
-      });
-      setApiData(response.data);
+      const response = await authClient.fetch(`${BACKEND_URL}/api/admin`);
+      const data = await response.json();
+      setApiData(data);
     } catch (err) {
-      setError(err.response?.data?.error || 'Error al conectar con el backend');
+      setError(err.message || 'Error al conectar con el backend');
       console.error('Error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (status === 'loading') {
+  if (!user) {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
@@ -80,10 +80,6 @@ export default function Dashboard() {
         </div>
       </Layout>
     );
-  }
-
-  if (!session) {
-    return null;
   }
 
   return (
@@ -94,7 +90,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-semibold mb-2 text-gray-900">Bienvenido</h3>
-            <p className="text-gray-600">{session.user?.name || session.user?.email}</p>
+            <p className="text-gray-600">{user.name || user.preferred_username || user.email}</p>
           </div>
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-semibold mb-2 text-gray-900">Estado</h3>
@@ -105,7 +101,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-lg font-semibold mb-2 text-gray-900">Token</h3>
             <p className="text-gray-600 text-sm truncate">
-              {session.accessToken ? '✓ Token activo' : '✗ Sin token'}
+              {authClient.getToken() ? '✓ Token activo' : '✗ Sin token'}
             </p>
           </div>
         </div>

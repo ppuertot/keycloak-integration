@@ -70,7 +70,8 @@ curl -s -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients" \
     "protocol": "openid-connect",
     "publicClient": false,
     "standardFlowEnabled": true,
-    "directAccessGrantsEnabled": true,
+    "directAccessGrantsEnabled": false,
+    "implicitFlowEnabled": false,
     "serviceAccountsEnabled": true,
     "authorizationServicesEnabled": false,
     "fullScopeAllowed": true
