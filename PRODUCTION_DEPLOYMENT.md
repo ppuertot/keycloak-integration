@@ -61,6 +61,8 @@ For production, you should use a reverse proxy (HAProxy, Nginx, or Traefik) with
 
 HAProxy will redirect from port 443 (HTTPS) to port 8080 (Keycloak container).
 
+**IMPORTANT:** Keycloak is configured to detect HTTPS through X-Forwarded headers from the proxy.
+
 ### Example HAProxy Configuration
 
 ```haproxy
@@ -78,9 +80,22 @@ backend keycloak_backend
     mode http
     balance roundrobin
     option forwardfor
+    
+    # CRITICAL: Headers required for Keycloak to generate HTTPS URLs
     http-request set-header X-Forwarded-Proto https
     http-request set-header X-Forwarded-Port 443
-    server keycloak1 127.0.0.1:8080 check
+    http-request set-header X-Forwarded-Host %[req.hdr(Host)]
+    
+    # Health check
+    option httpchk GET /health/ready
+    http-check expect status 200
+    
+    server keycloak1 127.0.0.1:8080 check inter 5s rise 2 fall 3
+
+# Redirect HTTP to HTTPS
+frontend http_frontend
+    bind *:80
+    redirect scheme https code 301 if !{ ssl_fc }
 ```
 
 ### Example Nginx Configuration
@@ -102,63 +117,47 @@ server {
         proxy_set_header X-Forwarded-Port 443;
     }
 }
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    server_name sgi-login.snpx.io;
+    return 301 https://$server_name$request_uri;
+}
 ```
-```
 
-## SSL/TLS Configuration
+## Keycloak Production Configuration
 
-For production, you should use a reverse proxy (Nginx, Traefik, or Caddy) with SSL:
+The `docker-compose.prod.yml` file includes the following Keycloak configuration optimized for production with HAProxy:
 
-### Example Nginx Configuration
+### Hostname Configuration (v2)
+- **KC_HOSTNAME**: `sgi-login.snpx.io` - Public domain for Keycloak
+- **KC_HOSTNAME_PORT**: `-1` - Uses default port based on scheme (443 for HTTPS)
+- **KC_HOSTNAME_STRICT**: `false` - Allows flexible hostname for backend communication
+- **KC_HOSTNAME_BACKCHANNEL_DYNAMIC**: `true` - Enables dynamic backend communication
 
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name auth.yourdomain.com;
+### Proxy Configuration
+- **KC_PROXY_HEADERS**: `xforwarded` - Reads X-Forwarded-* headers from HAProxy
+- **KC_HTTP_ENABLED**: `true` - Allows HTTP on port 8080 (internal communication)
 
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
+### How It Works
+When HAProxy sends requests with X-Forwarded headers:
+- Keycloak detects HTTPS scheme from `X-Forwarded-Proto: https`
+- Keycloak uses port 443 from `X-Forwarded-Port: 443`
+- Generated URLs: `https://sgi-login.snpx.io/...` ✅
 
-    location / {
-        proxy_pass http://localhost:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+Without X-Forwarded headers (direct access):
+- Generated URLs: `http://sgi-login.snpx.io:8080/...` (development/testing only)
 
-server {
-    listen 443 ssl http2;
-    server_name api.yourdomain.com;
+### Verification
+```bash
+# Test with X-Forwarded headers (simulating HAProxy)
+curl -I -H "X-Forwarded-Proto: https" -H "X-Forwarded-Port: 443" http://localhost:8080/
+# Expected: Location: https://sgi-login.snpx.io/admin/
 
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
-    location / {
-        proxy_pass http://localhost:3001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    server_name yourdomain.com;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+# Test direct access (should show port 8080)
+curl -I http://localhost:8080/
+# Expected: Location: http://sgi-login.snpx.io:8080/admin/
 ```
 
 ## Keycloak Configuration
@@ -221,15 +220,16 @@ Keycloak metrics are enabled and available at:
 ## Security Checklist
 
 - [ ] Changed all default passwords
-- [ ] Configured SSL/TLS with valid certificates
-- [ ] Enabled HTTPS strict mode in Keycloak (when using SSL)
-- [ ] Set up firewall rules (only expose necessary ports)
+- [ ] Configured SSL/TLS with valid certificates on reverse proxy (HAProxy/Nginx)
+- [ ] HAProxy/Nginx configured with X-Forwarded headers
+- [ ] Set up firewall rules (only expose port 443 externally, not 8080)
 - [ ] Regular backups configured
 - [ ] Resource limits configured for containers
 - [ ] Non-root users in Docker containers
 - [ ] Regularly update Docker images
 - [ ] Monitor logs for suspicious activity
 - [ ] Enable rate limiting on reverse proxy
+- [ ] Verify HTTPS URLs are generated correctly
 
 ## Maintenance
 
@@ -258,8 +258,14 @@ docker volume prune
 ### Keycloak won't start
 - Check database connection
 - Verify environment variables (especially KC_HOSTNAME)
-- Ensure KC_HTTP_ENABLED is true if not using SSL
+- Ensure KC_HTTP_ENABLED is true (required for internal HTTP on port 8080)
 - Check logs: `docker compose -f docker-compose.prod.yml logs keycloak`
+
+### Keycloak generates HTTP URLs instead of HTTPS
+- Verify HAProxy/Nginx is sending X-Forwarded-Proto: https header
+- Verify HAProxy/Nginx is sending X-Forwarded-Port: 443 header
+- Test with: `curl -I -H "X-Forwarded-Proto: https" -H "X-Forwarded-Port: 443" http://localhost:8080/`
+- Check that KC_PROXY_HEADERS=xforwarded in docker-compose.prod.yml
 
 ### PostgreSQL connection issues
 - Verify PostgreSQL is healthy
@@ -269,6 +275,7 @@ docker volume prune
 ### Port conflicts
 - Ensure port 8080 is not in use by another service
 - Check with: `netstat -tuln | grep 8080`
+- Ensure port 443 is configured in HAProxy/Nginx, not directly exposed by Keycloak
 
 ## Performance Tuning
 
@@ -286,7 +293,15 @@ Modify resource limits in `docker-compose.prod.yml` based on your needs.
 ## Support
 
 For issues and questions, check the logs and verify:
-1. All environment variables are set correctly
+1. All environment variables are set correctly in `.env.production`
 2. Network connectivity between services
-3. SSL certificates are valid (if using HTTPS)
-4. Keycloak realm and clients are configured properly
+3. SSL certificates are valid on HAProxy/Nginx (if using HTTPS)
+4. HAProxy/Nginx is sending X-Forwarded-* headers correctly
+5. Keycloak realm and clients are configured properly
+6. Firewall rules allow traffic on port 443 (external) and 8080 (internal only)
+
+## Additional Resources
+
+- **HAProxy Configuration**: See `HAPROXY_CONFIG.md` for detailed HAProxy setup
+- **Keycloak Documentation**: https://www.keycloak.org/documentation
+- **Docker Compose**: https://docs.docker.com/compose/
