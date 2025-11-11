@@ -44,3 +44,4 @@ docker-compose.override.yml
 # OS files
 .DS_Store
 Thumbs.db
+.env.production
