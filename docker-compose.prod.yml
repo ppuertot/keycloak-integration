@@ -27,10 +27,15 @@ services:
           memory: 512M
 
   keycloak:
-    image: quay.io/keycloak/keycloak:26.4.2
+    build:
+      context: .
+      dockerfile: Dockerfile.keycloak
+    image: keycloak-optimized:latest
     container_name: keycloak-prod
     restart: always
-    command: start
+    command: 
+      - "start"
+      - "--optimized"
     environment:
       # Database
       KC_DB: postgres
@@ -47,7 +52,7 @@ services:
       KC_HOSTNAME_PORT: -1
       KC_HOSTNAME_STRICT: false
       KC_HTTP_ENABLED: true
-      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: true
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: false
       
       # Proxy settings (HAProxy with X-Forwarded headers)
       KC_PROXY_HEADERS: xforwarded
@@ -66,7 +71,6 @@ services:
     ports:
       - "8080:8080"
       - "9000:9000"
-      - "8443:8443"
     depends_on:
       postgres:
         condition: service_healthy

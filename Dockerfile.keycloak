@@ -1,0 +1,13 @@
+FROM quay.io/keycloak/keycloak:26.4.2
+
+# Variables de entorno para el build
+ENV KC_DB=postgres \
+    KC_HEALTH_ENABLED=true \
+    KC_METRICS_ENABLED=true \
+    KC_PROXY_HEADERS=xforwarded
+
+# Ejecutar build en tiempo de construcción de la imagen
+RUN /opt/keycloak/bin/kc.sh build
+
+# El comando start --optimized será ejecutado por docker-compose
+ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
