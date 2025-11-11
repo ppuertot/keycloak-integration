@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: keycloak-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-keycloak}
+      POSTGRES_USER: ${POSTGRES_USER:-keycloak}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - keycloak-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.2
+    container_name: keycloak-prod
+    restart: always
+    command: start
+    environment:
+      # Database
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER:-keycloak}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      
+      # Admin credentials
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD is required}
+      
+      # Hostname Configuration v2 (HAProxy handles SSL)
+      KC_HOSTNAME: ${KC_HOSTNAME:?KC_HOSTNAME is required}
+      KC_HOSTNAME_PORT: -1
+      KC_HOSTNAME_STRICT: false
+      KC_HTTP_ENABLED: true
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: true
+      
+      # Proxy settings (HAProxy with X-Forwarded headers)
+      KC_PROXY_HEADERS: xforwarded
+      
+      # Health endpoints
+      KC_HEALTH_ENABLED: true
+      KC_METRICS_ENABLED: true
+      
+      # Logging
+      KC_LOG_LEVEL: ${KC_LOG_LEVEL:-info}
+      
+      # Performance
+      KC_DB_POOL_INITIAL_SIZE: ${KC_DB_POOL_INITIAL_SIZE:-5}
+      KC_DB_POOL_MAX_SIZE: ${KC_DB_POOL_MAX_SIZE:-20}
+      KC_DB_POOL_MIN_SIZE: ${KC_DB_POOL_MIN_SIZE:-5}
+    ports:
+      - "8080:8080"
+      - "9000:9000"
+      - "8443:8443"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - keycloak-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  keycloak-network:
+    driver: bridge
