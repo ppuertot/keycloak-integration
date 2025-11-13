@@ -76,6 +76,7 @@ services:
         condition: service_healthy
     networks:
       - keycloak-network
+      - proxy-network
     deploy:
       resources:
         limits:
@@ -92,3 +93,7 @@ volumes:
 networks:
   keycloak-network:
     driver: bridge
+
+  proxy-network:
+      external: true
+      name: shared-proxy-network
